@@ -25,7 +25,6 @@ usage() {
         echo "    muc_cty, muc_nord, muc_ost, muc_sued, muc_west, uml_nord,"
         echo "    uml_ost, uml_sued, uml_west, gauting, freising, welt"
         echo
-
         exit 1
 }
 
