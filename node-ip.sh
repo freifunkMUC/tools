@@ -1,10 +1,8 @@
 #!/bin/bash
 #
-# Script um auf einem Gateway die IP eines Nodes zu ermitteln, von der er den Wireguard Tunnel aufbaut.
-# Diese IP-Adresse kann dann auf den GWs mittels iptables (voruebergehend) geblocked/rejected werden.
-# z.b.: "iptables -A INPUT -p udp -s <Endpoint-IP> -j REJECT --reject-with icmp-host-unreachable"
+# Script for wireguard/batman gateways of Freifunk Muenchen to display the IP address of a connected node.
 #
-# Aufruf: node-ip.sh <fe80-Adresse aus map.ffmuc.net> <segment>
+# node-ip.sh <fe80-address from map.ffmuc.net> <segment>
 #
 
 umask 022
@@ -59,36 +57,38 @@ case $domain in !(muc_cty|muc_nord|muc_ost|muc_sued|muc_west|uml_nord|\
         usage
 esac
 
-# Einmaliger Ping der Adresse, damit Batman die erste MAC Adresse ermitteln kann
+# one time ping so batman gets notified about a node address
 ping6 -c1 $NodeIPv6_1%br-$domain >/dev/null 2>/dev/null
+
+# get first MAC address
 STRING1=$(batctl meshif bat-$domain ping -c1 $NodeIPv6_1%br-$domain | head -n1)
 [ $VERBOSE ] && echo STRING1 = $STRING1
 
-# an welcher Position befindet sich die erste offenen Klammer
+# at which position is the first open bracket
 POS1=$(expr index "$STRING1" "\(")
 [ $VERBOSE ] && echo POS1 = $POS1
 
-# Extrahieren der MAC aus Antwort1
+# extract MAC address from answer
 MAC1=${STRING1:$POS1:17}
 [ $VERBOSE ] && echo MAC1 = $MAC1
 
-# Ermitteln der zweiten MAC
+# get second MAC address
 STRING2=$(batctl meshif bat-$domain o | grep ${MAC1} | grep "^ \* ")
 [ $VERBOSE ] && echo STRING2 = "$STRING2"
 
-# das 6. "Wort" enthaelt die MAC Adresse
+# get MAC addrees from 6th word
 MAC2=`echo "$STRING2" | awk -v N=6 '{print $N}'`
 [ $VERBOSE ] && echo MAC2 = $MAC2
 
-# ermitteln einer IP Adresse ?
+# lookup IP address
 STRING3="`bridge fdb show | grep $MAC2`"
 [ $VERBOSE ] && echo STRING3 = $STRING3
 
-# das 5. "Wort" enthaelt die gesuchte IP Adresse
+# get IP address from 5th word
 NodeIPv6_2=`echo "$STRING3" | awk -v N=5 '{print $N}'`
 [ $VERBOSE ] && echo NodeIPv6_2 = $NodeIPv6_2
 
-# Ermitteln der ext. IP des verbindenden Nodes
+# lookup node ip adress
 if [ -d /sys/devices/virtual/net/wg-$domain ]; then
         STRING4=`wg show wg-$domain | grep -C3 $NodeIPv6_2 |grep endpoint`
         [ $VERBOSE ] && echo STRING4 = $STRING4
@@ -99,14 +99,13 @@ else
         echo "wireguard interface not found"
 fi
 
-# das 2. "Wort" enthaelt die IP
+# get node IP from 2nd word
 STRING5=`echo "$STRING4" | awk -v N=2 '{print $N}'`
 [ $VERBOSE ] && echo STRING5 = $STRING5
 
-# Abschliessend noch den Port abschneiden
+# cut port address from answer
 POS2=${STRING5%:*}
 [ $VERBOSE ] && echo POS2 = ${#POS2}
-
 STRING6="${STRING5:0:${#POS2}}"
 echo Node IP = $STRING6
 
