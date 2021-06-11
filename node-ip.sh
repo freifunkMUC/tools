@@ -29,8 +29,21 @@ usage() {
         exit 1
 }
 
+GwURLs=("gw04.ext.ffmuc.net" \
+        "gw05.ext.ffmuc.net" \
+        "gw06.ext.ffmuc.net" \
+        "gw07.ext.ffmuc.net")
 
-# check number of paramters
+GwIPs=( "5.1.66.3" \
+        "5.1.66.4" \
+        "185.150.99.1" \
+        "185.150.99.2" \
+        "[2001:678:e68:ff00::3]" \
+        "[2001:678:e68:ff00::4]" \
+        "[2001:678:ed0:ff00::1]" \
+        "[2001:678:ed0:ff00::2]")
+
+# check number of parameters
 if [ $# -lt 2 -o $# -gt 3 ]; then
         usage
 fi
@@ -59,6 +72,10 @@ esac
 
 # one time ping so batman gets notified about a node address
 ping6 -c1 $NodeIPv6_1%br-$domain >/dev/null 2>/dev/null
+if [ $? -gt 0 ]; then
+        echo "Error: could not reach $NodeIPv6_1 through device br-$domain"
+        exit 1
+fi
 
 # get first MAC address
 STRING1=$(batctl meshif bat-$domain ping -c1 $NodeIPv6_1%br-$domain | head -n1)
@@ -76,37 +93,52 @@ MAC1=${STRING1:$POS1:17}
 STRING2=$(batctl meshif bat-$domain o | grep ${MAC1} | grep "^ \* ")
 [ $VERBOSE ] && echo STRING2 = "$STRING2"
 
-# get MAC addrees from 6th word
-MAC2=`echo "$STRING2" | awk -v N=6 '{print $N}'`
+# extract MAC addrees from 6th word
+MAC2=$(echo "$STRING2" | awk -v N=6 '{print $N}')
 [ $VERBOSE ] && echo MAC2 = $MAC2
 
 # lookup IP address
-STRING3="`bridge fdb show | grep $MAC2`"
+STRING3=$(bridge fdb show | grep $MAC2)
 [ $VERBOSE ] && echo STRING3 = $STRING3
 
 # get IP address from 5th word
-NodeIPv6_2=`echo "$STRING3" | awk -v N=5 '{print $N}'`
+NodeIPv6_2=$(echo "$STRING3" | awk -v N=5 '{print $N}')
 [ $VERBOSE ] && echo NodeIPv6_2 = $NodeIPv6_2
 
 # lookup node ip adress
 if [ -d /sys/devices/virtual/net/wg-$domain ]; then
-        STRING4=`wg show wg-$domain | grep -C3 $NodeIPv6_2 |grep endpoint`
+        STRING4=$(wg show wg-$domain | grep -C3 $NodeIPv6_2 |grep endpoint)
         [ $VERBOSE ] && echo STRING4 = $STRING4
 elif [ -d /sys/devices/virtual/net/wg-uplink ]; then
-        STRING4=`wg show wg-uplink | grep -C3 $NodeIPv6_2 |grep endpoint`
+        STRING4=$(wg show wg-uplink  | grep -C3 $NodeIPv6_2 |grep endpoint)
         [ $VERBOSE ] && echo STRING4 = $STRING4
 else
         echo "wireguard interface not found"
+        exit 1
 fi
 
 # get node IP from 2nd word
-STRING5=`echo "$STRING4" | awk -v N=2 '{print $N}'`
+STRING5=$(echo "$STRING4" | awk -v N=2 '{print $N}')
 [ $VERBOSE ] && echo STRING5 = $STRING5
 
 # cut port address from answer
 POS2=${STRING5%:*}
 [ $VERBOSE ] && echo POS2 = ${#POS2}
 STRING6="${STRING5:0:${#POS2}}"
+[ $VERBOSE ] && echo STRING6 = $STRING6
+
+# filter out gateway ip addresses
+for i in ${GwIPs[@]}; do
+        [ $VERBOSE ] && echo $i
+        if [ "$STRING6" = "$i" ]; then
+                echo
+                echo "Error: node not reachable from this gateway"
+                echo "Possibly try on other gateway"
+                exit 1
+        fi
+done
+
+# display node ip
 echo Node IP = $STRING6
 
 exit 0
